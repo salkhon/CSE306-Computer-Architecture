@@ -22,9 +22,9 @@
   <lib desc="#BFH-Praktika" name="9"/>
   <lib desc="#Input/Output-Extra" name="10"/>
   <lib desc="#Soc" name="11"/>
-  <lib desc="file#phase2_add.circ" name="12"/>
-  <lib desc="file#phase3_post_add.circ" name="13"/>
-  <lib desc="file#phase1_pre_add.circ" name="14"/>
+  <lib desc="file#phase1_pre_add.circ" name="12"/>
+  <lib desc="file#phase2_add.circ" name="13"/>
+  <lib desc="file#phase3_post_add.circ" name="14"/>
   <main name="Main"/>
   <options>
     <a name="gateUndefined" val="ignore"/>
@@ -109,9 +109,9 @@
     <comp lib="0" loc="(590,760)" name="Probe">
       <a name="appearance" val="NewPins"/>
     </comp>
-    <comp lib="12" loc="(660,560)" name="fracnum_adder"/>
-    <comp lib="13" loc="(660,860)" name="Normalizer"/>
-    <comp lib="14" loc="(660,190)" name="full_pre_adder"/>
+    <comp lib="12" loc="(660,190)" name="full_pre_adder"/>
+    <comp lib="13" loc="(660,560)" name="fracnum_adder"/>
+    <comp lib="14" loc="(660,860)" name="Normalizer"/>
     <wire from="(160,270)" to="(160,990)"/>
     <wire from="(160,270)" to="(190,270)"/>
     <wire from="(160,990)" to="(700,990)"/>
