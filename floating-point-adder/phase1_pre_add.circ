@@ -468,7 +468,7 @@
     </comp>
     <comp lib="0" loc="(280,110)" name="Pin">
       <a name="appearance" val="NewPins"/>
-      <a name="label" val="smaller_frac"/>
+      <a name="label" val="smaller_sig"/>
       <a name="width" val="32"/>
     </comp>
     <comp lib="0" loc="(280,310)" name="Splitter">
@@ -567,14 +567,14 @@
     <comp lib="0" loc="(1060,310)" name="Pin">
       <a name="appearance" val="NewPins"/>
       <a name="facing" val="west"/>
-      <a name="label" val="larger_frac"/>
+      <a name="label" val="larger_sig"/>
       <a name="output" val="true"/>
       <a name="width" val="32"/>
     </comp>
     <comp lib="0" loc="(1110,410)" name="Pin">
       <a name="appearance" val="NewPins"/>
       <a name="facing" val="west"/>
-      <a name="label" val="smaller_frac"/>
+      <a name="label" val="smaller_sig"/>
       <a name="output" val="true"/>
       <a name="width" val="32"/>
     </comp>

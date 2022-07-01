@@ -56,9 +56,9 @@
     <a name="circuit" val="fracnum_adder"/>
     <a name="circuitnamedboxfixedsize" val="true"/>
     <a name="simulationFrequency" val="1.0"/>
-    <comp lib="0" loc="(280,440)" name="Pin">
+    <comp lib="0" loc="(280,450)" name="Pin">
       <a name="appearance" val="NewPins"/>
-      <a name="label" val="FracOverflow"/>
+      <a name="label" val="sig_overflow"/>
       <a name="output" val="true"/>
     </comp>
     <comp lib="0" loc="(280,480)" name="Pin">
@@ -67,18 +67,18 @@
     </comp>
     <comp lib="0" loc="(290,140)" name="Pin">
       <a name="appearance" val="classic"/>
-      <a name="label" val="LargerFrac"/>
+      <a name="label" val="larger_sig"/>
       <a name="width" val="32"/>
     </comp>
     <comp lib="0" loc="(290,290)" name="Pin">
       <a name="appearance" val="classic"/>
-      <a name="label" val="SmallerFrac"/>
+      <a name="label" val="smaller_sig"/>
       <a name="width" val="32"/>
     </comp>
     <comp lib="0" loc="(860,290)" name="Pin">
       <a name="appearance" val="classic"/>
       <a name="facing" val="west"/>
-      <a name="label" val="OutputFrac"/>
+      <a name="label" val="output_sig"/>
       <a name="output" val="true"/>
       <a name="width" val="32"/>
     </comp>
@@ -91,7 +91,8 @@
     <comp lib="3" loc="(510,400)" name="Adder">
       <a name="width" val="32"/>
     </comp>
-    <wire from="(280,440)" to="(490,440)"/>
+    <comp lib="6" loc="(490,540)" name="7408"/>
+    <wire from="(280,450)" to="(560,450)"/>
     <wire from="(280,480)" to="(520,480)"/>
     <wire from="(290,140)" to="(390,140)"/>
     <wire from="(290,290)" to="(410,290)"/>
@@ -102,13 +103,17 @@
     <wire from="(410,290)" to="(410,410)"/>
     <wire from="(410,290)" to="(470,290)"/>
     <wire from="(410,410)" to="(470,410)"/>
-    <wire from="(490,420)" to="(490,440)"/>
+    <wire from="(490,420)" to="(490,460)"/>
+    <wire from="(490,460)" to="(540,460)"/>
     <wire from="(510,280)" to="(750,280)"/>
     <wire from="(510,400)" to="(530,400)"/>
     <wire from="(520,420)" to="(520,480)"/>
     <wire from="(520,420)" to="(760,420)"/>
+    <wire from="(520,480)" to="(520,510)"/>
     <wire from="(530,300)" to="(530,400)"/>
     <wire from="(530,300)" to="(750,300)"/>
+    <wire from="(540,460)" to="(540,510)"/>
+    <wire from="(560,450)" to="(560,510)"/>
     <wire from="(760,310)" to="(760,420)"/>
     <wire from="(780,290)" to="(860,290)"/>
   </circuit>
