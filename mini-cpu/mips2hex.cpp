@@ -26,9 +26,10 @@ map<string, uint16_t> reg2addr{
 };
 
 /**
- * @brief Assign STACK_SEGMENT to $sp as the first instruction assembled, by default.
+ * @brief Assign STACK_SEGMENT to $sp as the first instruction assembled, by default. Registers are 4 bits, so 
+ * stack segment has to be within (0, 15)
  */
-const unsigned STACK_SEGMENT = 0x00;
+const uint8_t STACK_SEGMENT = 0x00;
 
 /**
  * @brief There are 16 operations. This maps the instructions to their opcodes. Extract the last 4 bits.
@@ -55,12 +56,13 @@ map<string, pair<uint16_t, InstructionTypes>> instr2op{
 /**
  * @brief Shifting amount to take LSB 4 bits to instruction format position.
  */
-const unsigned SHIFT_RS = 8, SHIFT_RT = 4, SHIFT_RD = 0;
+const unsigned SHIFT_RS = 8, SHIFT_RT = 4;
 /**
  * @brief Shifting amount to take LSB 8 bits to instruction formal position.
  */
 const unsigned SHIFT_JA = 4;
 
+void init(ofstream&);
 vector<uint16_t> convert_push_pop(string, string);
 uint16_t convert_mips_to_hexcode(string, string);
 uint16_t convert_Rtype(string, string);
@@ -69,6 +71,7 @@ uint16_t convert_Itype(string, string);
 uint16_t convert_Itype_loadstore(string, string);
 uint16_t convert_Jtype(string, string);
 
+// utils
 vector<string> split_str(string, string);
 void replace_substr(string&, string, string);
 
@@ -89,6 +92,7 @@ int main(int argc, char* argv[]) {
         cerr << "Error: Could not open write file: hex.dat" << endl;
         return 1;
     }
+    init(hexfile);
 
     string mips;
     while (getline(mipsfile, mips)) {
@@ -116,6 +120,15 @@ int main(int argc, char* argv[]) {
     hexfile.close();
 
     return 0;
+}
+
+void init(ofstream& hexfile) {
+    uint16_t hexcode = convert_Rtype("sub", "$zero,$zero,$zero");
+    hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t));
+    hexcode = convert_Rtype("sub", "$sp,$sp,$sp");
+    hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t));
+    hexcode = convert_Rtype("addi", "$sp,$sp," + (STACK_SEGMENT & 0x0F));
+    hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t));
 }
 
 uint16_t convert_mips_to_hexcode(string instruction, string operands) {
@@ -156,7 +169,7 @@ uint16_t convert_Rtype(string operation, string operands) {
     hexcode |= instr2op[operation].first;
     hexcode |= (reg2addr[rs] << SHIFT_RS);
     hexcode |= (reg2addr[rt] << SHIFT_RT);
-    hexcode |= (reg2addr[rd] << SHIFT_RD);
+    hexcode |= reg2addr[rd];
 
     return hexcode;
 }
@@ -171,7 +184,7 @@ uint16_t convert_Stype(string operation, string operands) {
     hexcode |= instr2op[operation].first;
     hexcode |= (reg2addr[rs] << SHIFT_RS);
     hexcode |= (reg2addr[rt] << SHIFT_RT);
-    hexcode |= (shamt_x16 << SHIFT_RD);
+    hexcode |= shamt_x16;
 
     return hexcode;
 }
@@ -189,7 +202,7 @@ uint16_t convert_Itype(string operation, string operands) {
     hexcode |= instr2op[operation].first;
     hexcode |= (reg2addr[rs] << SHIFT_RS);
     hexcode |= (reg2addr[rt] << SHIFT_RT);
-    hexcode |= (addr_imm_x16 << SHIFT_RD);
+    hexcode |= addr_imm_x16;
 
     return hexcode;
 }
@@ -197,8 +210,10 @@ uint16_t convert_Itype(string operation, string operands) {
 uint16_t convert_Itype_loadstore(string operation, string operands) {
     vector<string> args0 = split_str(operands, ",");
     string rt = args0[0];
+
     vector<string> args1 = split_str(args0[1], "(");
     args1[1].pop_back(); // removes trailing )
+    
     string offset = args1[0], rs = args1[1];
     int16_t offset_x16 = stoi(offset);
     if (offset_x16 < 0) {
@@ -210,8 +225,7 @@ uint16_t convert_Itype_loadstore(string operation, string operands) {
     hexcode |= instr2op[operation].first;
     hexcode |= (reg2addr[rs] << SHIFT_RS);
     hexcode |= (reg2addr[rt] << SHIFT_RT);
-    hexcode |= (offset_x16 << SHIFT_RD);
-
+    hexcode |= offset_x16;
     return hexcode;
 }
 
