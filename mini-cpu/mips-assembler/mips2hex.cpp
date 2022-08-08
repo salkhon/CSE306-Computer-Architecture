@@ -125,13 +125,7 @@ int main(int argc, char* argv[]) {
 
 void write_code_to_files(ofstream& hexfile, uint16_t hexcode, ofstream& hexfile_txt, string mips) {
     // hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t)); // Bytes are stored in little-endian format (LSByte first)
-    stringstream sstrm;
-    sstrm << hex << hexcode;
-    string hex_str = sstrm.str();
-    if (hex_str.length() == 3) {
-        hex_str = "0" + hex_str;
-    }
-    hexfile << hex_str << endl;
+    hexfile << setw(4) << setfill('0') << hex << hexcode << endl;
     hexfile_txt << mips << " ->\t" << bitset<16>(hexcode).to_string() << endl;
 }
 
