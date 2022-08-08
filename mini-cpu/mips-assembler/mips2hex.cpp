@@ -1,10 +1,10 @@
 #include <iostream>
-#include <algorithm>
 #include <string>
 #include <vector>
-#include <utility>
 #include <map>
 #include <fstream>
+#include <iomanip>
+#include <bitset>
 
 using namespace std;
 
@@ -62,7 +62,7 @@ const unsigned SHIFT_RS = 8, SHIFT_RT = 4;
  */
 const unsigned SHIFT_JA = 4;
 
-void init(ofstream&);
+void init(ofstream&, ofstream&);
 vector<uint16_t> convert_push_pop(string, string);
 uint16_t convert_mips_to_hexcode(string, string);
 uint16_t convert_Rtype(string, string);
@@ -72,6 +72,7 @@ uint16_t convert_Itype_loadstore(string, string);
 uint16_t convert_Jtype(string, string);
 
 // utils
+void write_code_to_files(ofstream&, uint16_t, ofstream&, string);
 vector<string> split_str(string, string);
 void replace_substr(string&, string, string);
 
@@ -87,12 +88,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    ofstream hexfile("hex.dat", ios::out | ios::binary);
-    if (!hexfile.is_open()) {
-        cerr << "Error: Could not open write file: hex.dat" << endl;
+    ofstream hexfile("hex.txt");
+    ofstream hexfile_txt("hex_debug.txt");
+    if (!hexfile.is_open() && hexfile_txt.is_open()) {
+        cerr << "Error: Could not open write file: hex.dat hex.txt" << endl;
         return 1;
     }
-    init(hexfile);
+    init(hexfile, hexfile_txt);
 
     string mips;
     while (getline(mipsfile, mips)) {
@@ -104,12 +106,11 @@ int main(int argc, char* argv[]) {
 
             if (instruction == "push" || instruction == "pop") {
                 vector<uint16_t> hexcodes = convert_push_pop(instruction, operands);
-                hexfile.write(reinterpret_cast<const char*>(&hexcodes[0]), sizeof(uint16_t));
-                hexfile.write(reinterpret_cast<const char*>(&hexcodes[1]), sizeof(uint16_t));
+                write_code_to_files(hexfile, hexcodes[0], hexfile_txt, mips);    
+                write_code_to_files(hexfile, hexcodes[1], hexfile_txt, "\t\t");    
             } else {
                 uint16_t hexcode = convert_mips_to_hexcode(instruction, operands);
-                hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t));
-                // cout << hexcode << endl; // Bytes are stored in little-endian format (LSByte first)
+                write_code_to_files(hexfile, hexcode, hexfile_txt, mips);
             }
         } catch (int exception) {
             cerr << "Could not convert instruction" << endl;
@@ -122,13 +123,28 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-void init(ofstream& hexfile) {
-    uint16_t hexcode = convert_Rtype("sub", "$zero,$zero,$zero");
-    hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t));
-    hexcode = convert_Rtype("sub", "$sp,$sp,$sp");
-    hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t));
-    hexcode = convert_Rtype("addi", "$sp,$sp," + (STACK_SEGMENT & 0x0F));
-    hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t));
+void write_code_to_files(ofstream& hexfile, uint16_t hexcode, ofstream& hexfile_txt, string mips) {
+    // hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t)); // Bytes are stored in little-endian format (LSByte first)
+    stringstream sstrm;
+    sstrm << hex << hexcode;
+    string hex_str = sstrm.str();
+    if (hex_str.length() == 3) {
+        hex_str = "0" + hex_str;
+    }
+    hexfile << hex_str << endl;
+    hexfile_txt << mips << " ->\t" << bitset<16>(hexcode).to_string() << endl;
+}
+
+void init(ofstream& hexfile, ofstream& hexfile_txt) {
+    string instr = "sub", operands = "$zero,$zero,$zero";
+    uint16_t hexcode = convert_Rtype(instr, operands);
+    write_code_to_files(hexfile, hexcode, hexfile_txt, instr + " " + operands);
+    instr = "sub", operands = "$sp,$sp,$sp";
+    hexcode = convert_Rtype(instr, operands);
+    write_code_to_files(hexfile, hexcode, hexfile_txt, instr + " " + operands);
+    instr = "addi", operands = "$sp,$sp," + (STACK_SEGMENT & 0x0F);
+    hexcode = convert_Rtype(instr, operands);
+    write_code_to_files(hexfile, hexcode, hexfile_txt, instr + " " + operands);
 }
 
 uint16_t convert_mips_to_hexcode(string instruction, string operands) {

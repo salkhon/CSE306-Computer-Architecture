@@ -1,6 +1,0 @@
-add $t0,$t1, $t2
-ori $t3, $t2,5
-lw $t1,14($t2)
-j 126
-push $t2
-pop $t4
