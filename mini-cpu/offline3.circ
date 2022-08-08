@@ -86,7 +86,6 @@
     <comp lib="0" loc="(1120,210)" name="Bit Extender">
       <a name="in_width" val="4"/>
       <a name="out_width" val="8"/>
-      <a name="type" val="zero"/>
     </comp>
     <comp lib="0" loc="(1180,640)" name="Pin">
       <a name="appearance" val="NewPins"/>

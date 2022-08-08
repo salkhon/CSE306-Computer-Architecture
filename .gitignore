@@ -2,4 +2,5 @@
 *.exe
 *.out
 *.dat
-*.txt
+hex.txt
+hex_debug.txt
