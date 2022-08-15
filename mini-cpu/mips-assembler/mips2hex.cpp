@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <bitset>
+#include <sstream>
 
 using namespace std;
 
@@ -26,7 +27,7 @@ map<string, uint16_t> reg2addr{
 };
 
 /**
- * @brief Assign STACK_SEGMENT to $sp as the first instruction assembled, by default. Registers are 4 bits, so 
+ * @brief Assign STACK_SEGMENT to $sp as the first instruction assembled, by default. Registers are 4 bits, so
  * stack segment has to be within (0, 15)
  */
 const uint8_t STACK_SEGMENT = 0x00;
@@ -62,7 +63,39 @@ const unsigned SHIFT_RS = 8, SHIFT_RT = 4;
  */
 const unsigned SHIFT_JA = 4;
 
-void init(ofstream&, ofstream&);
+/**
+ * @brief Labels can be referred before they are defined sequentially. So label to line mappings
+ * need to be done in two passes. First pass assembles mips to instruction codes without setting
+ * the offset or address on BEQ, BNEQ, J instructions, those fields remain blank. It populates the
+ * label2line map with with label to corresponding definition line mapping in the instruction code.
+ *
+ * On the second pass, it goes through the BEQ, BNEQ, J instructions and fill in their blank
+ * offset and address fields with the mapped lines correspoinding to their labels.
+ */
+
+ /**
+  * @brief Maps labels to their corresponding hex code lines.
+  */
+map<string, unsigned> label2line;
+/**
+ * @brief Labels are added to the queue in the order they are encountered in beq, bneq and j instructions.
+ * They are filled on the 2nd pass, in that order.
+ */
+vector<string> labels_to_fill;
+
+/**
+ * @brief For debugging
+ */
+map<unsigned, unsigned> mipsline2hexline;
+
+vector<string> init();
+vector<string> read_all_mips(ifstream&);
+vector<string> preprocess_mips(string, unsigned, unsigned);
+vector<string> generate_binary_instr_without_labels(vector<string>&);
+void generate_hex_instr_with_labels(vector<string>&);
+void dump_hexcode_to_file(vector<string>&, ofstream&);
+void generate_debug_file(vector<string>&, vector<string>&);
+
 vector<uint16_t> convert_push_pop(string, string);
 uint16_t convert_mips_to_hexcode(string, string);
 uint16_t convert_Rtype(string, string);
@@ -72,9 +105,12 @@ uint16_t convert_Itype_loadstore(string, string);
 uint16_t convert_Jtype(string, string);
 
 // utils
-void write_code_to_files(ofstream&, uint16_t, ofstream&, string);
 vector<string> split_str(string, string);
 void replace_substr(string&, string, string);
+void trim(string&);
+string convert_uint16_to_binstring(uint16_t);
+string convert_uint16_to_hexstring(uint16_t);
+string convert_hex_to_bin_str(string);
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
@@ -89,33 +125,20 @@ int main(int argc, char* argv[]) {
     }
 
     ofstream hexfile("hex.txt");
-    ofstream hexfile_txt("hex_debug.txt");
-    if (!hexfile.is_open() && hexfile_txt.is_open()) {
-        cerr << "Error: Could not open write file: hex.dat hex.txt" << endl;
+    if (!hexfile.is_open()) {
+        cerr << "Error: Could not open write file: hex.txt" << endl;
         return 1;
     }
-    init(hexfile, hexfile_txt);
 
-    string mips;
-    while (getline(mipsfile, mips)) {
-        try {
-            // pre process instruction
-            replace_substr(mips, ", ", ",");
-            vector<string> mips_split1 = split_str(mips, " ");
-            string instruction = mips_split1[0], operands = mips_split1[1];
+    vector<string> mipscode = init();
+    vector<string> read_mips = read_all_mips(mipsfile);
+    mipscode.insert(mipscode.end(), read_mips.begin(), read_mips.end());
 
-            if (instruction == "push" || instruction == "pop") {
-                vector<uint16_t> hexcodes = convert_push_pop(instruction, operands);
-                write_code_to_files(hexfile, hexcodes[0], hexfile_txt, mips);    
-                write_code_to_files(hexfile, hexcodes[1], hexfile_txt, "\t\t");    
-            } else {
-                uint16_t hexcode = convert_mips_to_hexcode(instruction, operands);
-                write_code_to_files(hexfile, hexcode, hexfile_txt, mips);
-            }
-        } catch (int exception) {
-            cerr << "Could not convert instruction" << endl;
-        }
-    }
+    vector<string> hexcode = generate_binary_instr_without_labels(mipscode);
+    generate_hex_instr_with_labels(hexcode);
+    dump_hexcode_to_file(hexcode, hexfile);
+
+    generate_debug_file(mipscode, hexcode);
 
     mipsfile.close();
     hexfile.close();
@@ -123,22 +146,149 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-void write_code_to_files(ofstream& hexfile, uint16_t hexcode, ofstream& hexfile_txt, string mips) {
-    // hexfile.write(reinterpret_cast<const char*>(&hexcode), sizeof(uint16_t)); // Bytes are stored in little-endian format (LSByte first)
-    hexfile << setw(4) << setfill('0') << hex << hexcode << endl;
-    hexfile_txt << mips << " ->\t" << bitset<16>(hexcode).to_string() << endl;
+vector<string> init() {
+    vector<string> mipscode{
+        "sub $zero, $zero, $zero",
+        "sub $sp, $sp, $sp",
+        "addi $sp, $sp," + to_string(STACK_SEGMENT & 0x0F)
+    };
+    return mipscode;
 }
 
-void init(ofstream& hexfile, ofstream& hexfile_txt) {
-    string instr = "sub", operands = "$zero,$zero,$zero";
-    uint16_t hexcode = convert_Rtype(instr, operands);
-    write_code_to_files(hexfile, hexcode, hexfile_txt, instr + " " + operands);
-    instr = "sub", operands = "$sp,$sp,$sp";
-    hexcode = convert_Rtype(instr, operands);
-    write_code_to_files(hexfile, hexcode, hexfile_txt, instr + " " + operands);
-    instr = "addi", operands = "$sp,$sp," + (STACK_SEGMENT & 0x0F);
-    hexcode = convert_Rtype(instr, operands);
-    write_code_to_files(hexfile, hexcode, hexfile_txt, instr + " " + operands);
+/**
+ * @brief Reads all mips code from provided file.
+ *
+ * @param mipsfile File to read mips code from
+ * @return vector<string> List of strings corresponding to mips code lines
+ */
+vector<string> read_all_mips(ifstream& mipsfile) {
+    vector<string> mips_code;
+    string mips;
+    while (getline(mipsfile, mips)) {
+        mips_code.push_back(mips);
+    }
+    return mips_code;
+}
+
+/**
+ * @brief Splits instruction in label and instruction. If instruction has label, label2line map is populated.
+ * Then splits instruction by instruction name and operands.
+ *
+ * @param mips Mips line
+ * @param hex_line Current hex code line
+ * @return vector<string> List of 2 elements, instruction name and its arguments in string
+ */
+vector<string> preprocess_mips(string mips, unsigned mipsline, unsigned hexline) {
+    mipsline2hexline[mipsline] = hexline;
+    trim(mips);
+    vector<string> label_mips_split = split_str(mips, ":");
+    if (label_mips_split.size() > 1) {
+        // there's a label
+        label2line[label_mips_split[0]] = hexline;
+        mips = label_mips_split[1];
+        trim(mips);
+    }
+
+    replace_substr(mips, ", ", ",");
+
+    vector<string> instr_arg_split = split_str(mips, " ");
+    return instr_arg_split;
+}
+
+/**
+ * @brief Generates hexcode from list of mips lines. Also populates the global label2line map,
+ * which maps which hex line each label corresponds to. This mapping cannot be done dynamically
+ * without generating hex.
+ *
+ * @param mipscode List of mips code lines
+ * @return vector<string> List of hex code lines, without beq, bneq instruction offset and j instruction
+ * address.
+ */
+vector<string> generate_binary_instr_without_labels(vector<string>& mipscodes) {
+    vector<string> hexcodes;
+
+    for (unsigned mipsline = 0, hexline = 0; mipsline < mipscodes.size(); mipsline++) {
+        try {
+            vector<string> instr_operand_split = preprocess_mips(mipscodes[mipsline], mipsline, hexline);
+            string instruction = instr_operand_split[0], operands = instr_operand_split[1];
+
+            if (instruction == "push" || instruction == "pop") {
+                vector<uint16_t> hexcodes_x16 = convert_push_pop(instruction, operands);
+                hexcodes.push_back(convert_uint16_to_binstring(hexcodes_x16[0]));
+                hexcodes.push_back(convert_uint16_to_binstring(hexcodes_x16[1]));
+                hexline += 2;
+            } else {
+                uint16_t hexcode = convert_mips_to_hexcode(instruction, operands);
+                hexcodes.push_back(convert_uint16_to_binstring(hexcode));
+                hexline++;
+            }
+        } catch (int exception) {
+            cerr << "Could not convert instruction" << endl;
+        }
+    }
+    return hexcodes;
+}
+
+/**
+ * @brief Populates the immediate field of beq, bneq instructions, and the address field of j instructions
+ * from the label2line map generated by the function `generate_binary_instr_without_labels`.
+ * So `generate_binary_instr_without_labels` has to be executed before this function can execute.
+ *
+ * @param hex_wo_label
+ * @return vector<string>
+ */
+void generate_hex_instr_with_labels(vector<string>& instr_without_label) {
+    stringstream sstrm;
+    uint16_t hex_x16;
+    int16_t offset_or_addr;
+    for (int hexline = 0; hexline < instr_without_label.size(); hexline++) {
+        hex_x16 = stoi(instr_without_label[hexline], nullptr, 2);
+
+        if (instr_without_label[hexline].find("0100") == 0) {
+            // jump instruction
+            offset_or_addr = label2line[labels_to_fill[0]];
+            labels_to_fill.erase(labels_to_fill.begin());
+
+            hex_x16 |= offset_or_addr << SHIFT_JA;
+        } else if (instr_without_label[hexline].find("0110") == 0 ||
+            instr_without_label[hexline].find("1010") == 0) {
+            // bneq or beq instruction
+            offset_or_addr = label2line[labels_to_fill[0]] - hexline;
+            if (offset_or_addr > 7 || offset_or_addr < -8) {
+                cerr << "WARNING: offset overflow detected at hex line " << hexline << endl;
+            }
+            if (offset_or_addr < 0) {
+                offset_or_addr &= 0x000F; // zero-ing every other bits than LSB 4 bits. offset range (-8, 7)
+            }
+            labels_to_fill.erase(labels_to_fill.begin());
+
+            hex_x16 |= offset_or_addr;
+        }
+
+        instr_without_label[hexline] = convert_uint16_to_hexstring(hex_x16);
+        sstrm.clear();
+    }
+}
+
+void dump_hexcode_to_file(vector<string>& hexcodes, ofstream& hexfile) {
+    for (string& hexcode : hexcodes) {
+        hexfile << hexcode << endl;
+    }
+}
+
+void generate_debug_file(vector<string>& mipscode, vector<string>& hexcode) {
+    ofstream hex_debug_file("hex_debug.txt");
+    for (unsigned mipsline = 1, hexline = 0; mipsline < mipscode.size(); mipsline++) {
+        hex_debug_file << "[" << mipsline - 1 << "] " << mipscode[mipsline - 1] << ":" << endl;
+        while (hexline != mipsline2hexline[mipsline]) {
+            hex_debug_file << "\t" << "[" << hexline << "] " << convert_hex_to_bin_str(hexcode[hexline++]) << endl;
+        }
+    }
+    hex_debug_file << "[" << mipscode.size() - 1 << "] " << mipscode[mipscode.size() - 1] << endl;
+    for (unsigned hexline = mipsline2hexline[mipscode.size() - 1]; hexline < hexcode.size(); hexline++) {
+        hex_debug_file << "\t" << "[" << hexline << "] " << convert_hex_to_bin_str(hexcode[hexline]) << endl;
+    }
+    hex_debug_file.close();
 }
 
 uint16_t convert_mips_to_hexcode(string instruction, string operands) {
@@ -202,18 +352,22 @@ uint16_t convert_Stype(string operation, string operands) {
 uint16_t convert_Itype(string operation, string operands) {
     vector<string> args = split_str(operands, ",");
     string rt = args[0], rs = args[1];
-    int16_t addr_imm_x16 = stoi(args[2]);
-    if (addr_imm_x16 < 0) {
-        addr_imm_x16 &= 0x000F; // zero-ing every bits other than 4 LSB bits (immi range -8, 7)
+
+    int16_t addr_imm_x16;
+    if (operation == "beq" || operation == "bneq") {
+        // if beq or bne, label will be filled in a later pass (bit0 to bit3)
+        addr_imm_x16 = 0;
+        labels_to_fill.push_back(args[2]);
+    } else {
+        addr_imm_x16 = stoi(args[2]);
     }
 
-    // cout << rs << " " << rt << " " << addr_imm << endl;
+    // cout << rs << " " << rt << " " << addr_imm_x16 << endl;
     uint16_t hexcode = 0;
     hexcode |= instr2op[operation].first;
     hexcode |= (reg2addr[rs] << SHIFT_RS);
     hexcode |= (reg2addr[rt] << SHIFT_RT);
     hexcode |= addr_imm_x16;
-
     return hexcode;
 }
 
@@ -223,7 +377,7 @@ uint16_t convert_Itype_loadstore(string operation, string operands) {
 
     vector<string> args1 = split_str(args0[1], "(");
     args1[1].pop_back(); // removes trailing )
-    
+
     string offset = args1[0], rs = args1[1];
     int16_t offset_x16 = stoi(offset);
     if (offset_x16 < 0) {
@@ -240,7 +394,8 @@ uint16_t convert_Itype_loadstore(string operation, string operands) {
 }
 
 uint16_t convert_Jtype(string operation, string operands) {
-    uint16_t addr_x16 = stoi(operands);
+    uint16_t addr_x16 = 0; // j addresses will be filled in a later pass (bit4 to bit 11)
+    labels_to_fill.push_back(operands);
 
     // cout << operands << endl;
     uint16_t hexcode = 0;
@@ -249,6 +404,7 @@ uint16_t convert_Jtype(string operation, string operands) {
     return hexcode;
 }
 
+// utils
 vector<string> split_str(string str, string delim) {
     vector<string> split;
     int str_start = 0;
@@ -260,10 +416,45 @@ vector<string> split_str(string str, string delim) {
     return split;
 }
 
+/**
+ * @brief Replaces subject string containing target substring, with the replacement string.
+ *
+ * @param subject String to replace in
+ * @param target Substring to replace
+ * @param replacement String to replace target substring with
+ */
 void replace_substr(string& subject, string target, string replacement) {
     size_t pos = 0;
     while ((pos = subject.find(target, pos)) != string::npos) {
         subject.replace(pos, target.length(), replacement);
         pos += replacement.length();
     }
+}
+
+/**
+ * @brief Trims whitespace from string.
+ *
+ * @param str String to trim
+ */
+void trim(string& str) {
+    string ws = " \t";
+    str.erase(0, str.find_first_not_of(ws));
+    str.erase(str.find_last_not_of(ws) + 1);
+}
+
+string convert_uint16_to_binstring(uint16_t hexnum) {
+    stringstream sstrm;
+    sstrm << bitset<16>(hexnum);
+    return sstrm.str();
+}
+
+string convert_uint16_to_hexstring(uint16_t hexcode) {
+    stringstream sstrm;
+    sstrm << setw(4) << setfill('0') << hex << hexcode;
+    return sstrm.str();
+}
+
+string convert_hex_to_bin_str(string hex_str) {
+    uint16_t hex = stoi(hex_str, nullptr, 16);
+    return convert_uint16_to_binstring(hex);
 }
