@@ -14,7 +14,7 @@ enum InstructionTypes {
 };
 
 /**
- * @brief There are 6 registers. This maps register $names to their address. Extract the last 4 bits.
+ * @brief There are 7 registers. This maps register $names to their address. Extract the last 4 bits.
  */
 map<string, uint16_t> reg2addr{
     {"$zero", 0x0000},
@@ -90,7 +90,6 @@ uint16_t convert_Itype(string, string, size_t = 0);
 uint16_t convert_Itype_loadstore(string, string);
 uint16_t convert_Jtype(string, string);
 
-// utils
 vector<string> split_str(string, string);
 void replace_substr(string&, string, string);
 void trim(string&);
@@ -134,6 +133,7 @@ int main(int argc, char* argv[]) {
 
 vector<string> init_mipscode() {
     vector<string> mipscode{
+        "sub $zero, $zero, $zero", // first instruction skips, call this NOP
         "sub $zero, $zero, $zero",
         "sub $sp, $sp, $sp",
         "addi $sp, $sp," + to_string(STACK_SEGMENT & 0x0F)
@@ -188,11 +188,11 @@ void first_pass_to_map_label_def_to_hexlines(vector<string>& mipscode) {
  */
 string process_label(string mips, unsigned hexline) {
     trim(mips);
-    vector<string> label_mips_split = split_str(mips, ":");
-    if (label_mips_split.size() > 1) {
+    if (mips.find(':') != string::npos) {
         // label found
+        vector<string> label_mips_split = split_str(mips, ":");
         mipslabel2hexline[label_mips_split[0]] = hexline; // the label definition is mapped to current hexline
-        mips = label_mips_split[1];
+        mips = label_mips_split[1]; // mips line may just contain label:, on that case [1] is ""
         trim(mips);
     }
     return mips;
@@ -212,6 +212,14 @@ vector<string> second_pass_to_generate_hexcode(vector<string>& mipscode) {
     for (string& mips : mipscode) {
         try {
             vector<string> instr_operand_split = preprocess_mips(mips);
+
+            if (instr_operand_split.size() == 1) {
+                // empty line (only label)
+                // call this NOP
+                instr_operand_split[0] = "sub";
+                instr_operand_split.push_back("$zero,$zero,$zero");
+            }
+
             string instruction = instr_operand_split[0], operands = instr_operand_split[1];
 
             if (instruction == "push" || instruction == "pop") {
@@ -241,7 +249,8 @@ vector<string> second_pass_to_generate_hexcode(vector<string>& mipscode) {
 vector<string> preprocess_mips(string mips) {
     trim(mips);
     vector<string> label_mips_split = split_str(mips, ":");
-    if (label_mips_split.size() > 1) {
+    if (mips.find(':') != string::npos) {
+        vector<string> label_mips_split = split_str(mips, ":");
         mips = label_mips_split[1];
         trim(mips);
     }
@@ -402,9 +411,9 @@ uint16_t convert_Jtype(string operation, string operand) {
     return hexcode;
 }
 
-// utils
 /**
- * @brief Splits `str` by the provided `delim`
+ * @brief Splits `str` by the provided `delim`. This implementation may contain a trailing empty
+ * string, don't rely on the .size() of the returned list for any operation.
  *
  * @param str String to split
  * @param delim Delimitter to split string by

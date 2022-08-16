@@ -20,4 +20,4 @@ and $t1, $t2, $t4
 pop $t1
 j end
 label2:    bneq $t0, $t2, label3
-end:    addi $t1, $t1, 0
+end:
