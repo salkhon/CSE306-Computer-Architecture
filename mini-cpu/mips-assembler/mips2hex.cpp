@@ -30,7 +30,7 @@ map<string, uint16_t> reg2addr{
  * @brief Assign STACK_SEGMENT to $sp as the first instruction assembled, by default. Registers are 4 bits, so
  * stack segment has to be within (0, 15)
  */
-const uint8_t STACK_SEGMENT = 0x00;
+const uint8_t STACK_SEGMENT = 0x0F;
 
 /**
  * @brief There are 16 operations. This maps the instructions to their opcodes. Extract the last 4 bits.
@@ -370,7 +370,11 @@ uint16_t convert_Itype(string operation, string operands, size_t hexline) {
     // else its just a constant number.
     int16_t addr_imm_x16 =
         operation == "beq" || operation == "bneq" ?
-        mipslabel2hexline[args[2]] - hexline : stoi(args[2]);
+        mipslabel2hexline[args[2]] - hexline - 1 : stoi(args[2]); 
+        // -1 because PC is already incremented after the branch instruciton
+    if (addr_imm_x16 < 0) {
+        addr_imm_x16 &= 0x000F; // zero-ing every bit other than 4 LSBs. 
+    }
 
     uint16_t hexcode = 0;
     hexcode |= instr2op[operation].first;
