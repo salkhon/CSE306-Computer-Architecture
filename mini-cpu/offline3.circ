@@ -211,9 +211,9 @@
       <a name="appearance" val="logisim_evolution"/>
       <a name="contents">addr/data: 8 16
 9000 9000 9666 66f 23 103e d231 9234
-c135 f323 b331 a431 41e0 5441 7334 f620
+c135 f323 b331 a432 41e0 5441 7334 f620
 66f f630 66f 41d0 e131 3531 8225 7630
-661 2352 7620 661 41e0 6316 9000
+661 2352 7620 661 41e0 6317 9000
 </a>
       <a name="dataWidth" val="16"/>
       <a name="label" val="Instructions"/>
@@ -232,18 +232,32 @@ c135 f323 b331 a431 41e0 5441 7334 f620
       <a name="font" val="SansSerif bold 23"/>
       <a name="text" val="Instructions"/>
     </comp>
-    <comp loc="(1110,100)" name="Adder83"/>
+    <comp loc="(1110,100)" name="Adder83">
+      <a name="label" val="PCInc"/>
+    </comp>
     <comp loc="(1110,290)" name="control_unit"/>
     <comp loc="(1120,700)" name="Registers"/>
-    <comp loc="(1380,810)" name="FourBitMUX"/>
-    <comp loc="(1480,190)" name="Adder83"/>
+    <comp loc="(1380,810)" name="FourBitMUX">
+      <a name="label" val="ALUSrc"/>
+    </comp>
+    <comp loc="(1480,190)" name="Adder83">
+      <a name="label" val="PCBranch"/>
+    </comp>
     <comp loc="(1620,690)" name="ALU"/>
-    <comp loc="(1820,170)" name="EightBitMUX"/>
-    <comp loc="(2090,150)" name="EightBitMUX"/>
-    <comp loc="(2320,650)" name="FourBitMUX"/>
-    <comp loc="(860,760)" name="FourBitMUX"/>
+    <comp loc="(1820,170)" name="EightBitMUX">
+      <a name="label" val="Branch"/>
+    </comp>
+    <comp loc="(2090,150)" name="EightBitMUX">
+      <a name="label" val="Jump"/>
+    </comp>
+    <comp loc="(2320,650)" name="FourBitMUX">
+      <a name="label" val="MemToReg"/>
+    </comp>
+    <comp loc="(860,760)" name="FourBitMUX">
+      <a name="label" val="RegDst"/>
+    </comp>
     <wire from="(100,430)" to="(120,430)"/>
-    <wire from="(1110,120)" to="(1220,120)"/>
+    <wire from="(1110,120)" to="(1540,120)"/>
     <wire from="(1110,290)" to="(1140,290)"/>
     <wire from="(1110,310)" to="(1160,310)"/>
     <wire from="(1110,330)" to="(1400,330)"/>
@@ -274,9 +288,8 @@ c135 f323 b331 a431 41e0 5441 7334 f620
     <wire from="(120,420)" to="(120,430)"/>
     <wire from="(120,420)" to="(170,420)"/>
     <wire from="(120,430)" to="(210,430)"/>
-    <wire from="(1220,120)" to="(1220,190)"/>
-    <wire from="(1220,120)" to="(1540,120)"/>
-    <wire from="(1220,190)" to="(1260,190)"/>
+    <wire from="(1200,180)" to="(1200,190)"/>
+    <wire from="(1200,190)" to="(1260,190)"/>
     <wire from="(1260,190)" to="(1270,190)"/>
     <wire from="(1260,430)" to="(1260,570)"/>
     <wire from="(1260,570)" to="(1260,730)"/>
@@ -331,7 +344,7 @@ c135 f323 b331 a431 41e0 5441 7334 f620
     <wire from="(1690,400)" to="(1690,480)"/>
     <wire from="(1690,480)" to="(1690,710)"/>
     <wire from="(170,100)" to="(170,420)"/>
-    <wire from="(170,100)" to="(890,100)"/>
+    <wire from="(170,100)" to="(650,100)"/>
     <wire from="(1710,670)" to="(1710,730)"/>
     <wire from="(1710,670)" to="(2100,670)"/>
     <wire from="(1710,730)" to="(1740,730)"/>
@@ -399,6 +412,9 @@ c135 f323 b331 a431 41e0 5441 7334 f620
     <wire from="(630,780)" to="(640,780)"/>
     <wire from="(640,270)" to="(1140,270)"/>
     <wire from="(640,270)" to="(640,760)"/>
+    <wire from="(650,100)" to="(650,180)"/>
+    <wire from="(650,100)" to="(890,100)"/>
+    <wire from="(650,180)" to="(1200,180)"/>
     <wire from="(680,120)" to="(890,120)"/>
     <wire from="(800,650)" to="(840,650)"/>
     <wire from="(800,690)" to="(830,690)"/>
