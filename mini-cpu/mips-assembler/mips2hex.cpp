@@ -355,8 +355,8 @@ vector<uint16_t> convert_push_pop(string operation, string operands) {
         hexcodes.push_back(convert_Itype_loadstore("sw", operands + "," + "0($sp)"));
         hexcodes.push_back(convert_Itype("subi", "$sp,$sp,1"));
     } else if (operation == "pop") {
-        hexcodes.push_back(convert_Itype_loadstore("lw", operands + "," + "1($sp)"));
         hexcodes.push_back(convert_Itype("addi", "$sp,$sp,1"));
+        hexcodes.push_back(convert_Itype_loadstore("lw", operands + "," + "0($sp)"));
     }
     return hexcodes;
 }
@@ -392,6 +392,8 @@ uint16_t convert_Itype(string operation, string operands) {
     vector<string> args = split_str(operands, ",");
     string rt = args[0], rs = args[1];
     int16_t immidiate = stoi(args[2]);
+
+    immidiate &= 0x000F; // zero-ing every bit other than 4 LSB
 
     uint16_t hexcode = 0;
     hexcode |= instr2op[operation].first;
