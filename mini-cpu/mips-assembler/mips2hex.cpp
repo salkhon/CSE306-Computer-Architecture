@@ -10,7 +10,11 @@
 using namespace std;
 
 enum InstructionTypes {
-    R, S, I, ILS, J
+    R, S, I, ILS, IB, J
+};
+
+enum Exception {
+    BRACH_OFFSET_OVERFLOW, INVALID_INSTR
 };
 
 /**
@@ -42,11 +46,11 @@ map<string, pair<uint16_t, InstructionTypes>> instr2op{
     {"andi", {0x3000, I}},
     {"j", {0x4000, J}},
     {"sll", {0x5000, S}},
-    {"bneq", {0x6000, I}},
+    {"bneq", {0x6000, IB}},
     {"lw", {0x7000, ILS}},
     {"ori", {0x8000, I}},
     {"sub", {0x9000, R}},
-    {"beq", {0xA000, I}},
+    {"beq", {0xA000, IB}},
     {"srl", {0xB000, S}},
     {"nor", {0xC000, R}},
     {"add", {0xD000, R}},
@@ -66,7 +70,7 @@ const unsigned SHIFT_JA = 4;
 /**
  * @brief Maps label definitions to their corresponding hex code lines, in the first pass.
  */
-map<string, unsigned> mipslabel2hexline;
+map<string, unsigned> label2line;
 
 /**
  * @brief For debugging
@@ -76,23 +80,27 @@ map<unsigned, unsigned> mipsline2hexlinestart;
 vector<string> init_mipscode();
 void read_all_mips(ifstream&, vector<string>&);
 void first_pass_to_map_label_def_to_hexlines(vector<string>&);
-string process_label(string, unsigned);
+string process_label(string, size_t);
 vector<string> second_pass_to_generate_hexcode(vector<string>&);
+void replace_branch_instr(vector<string>&, size_t);
 vector<string> preprocess_mips(string mips);
 void dump_hexcode_to_file(vector<string>&, ofstream&);
 void generate_debug_file(vector<string>&, vector<string>&);
 
 vector<uint16_t> convert_push_pop(string, string);
-uint16_t convert_mips_to_hexcode(string, string, size_t);
+uint16_t convert_mips_to_hexcode(string, string, vector<string>&, size_t);
 uint16_t convert_Rtype(string, string);
 uint16_t convert_Stype(string, string);
-uint16_t convert_Itype(string, string, size_t = 0);
+uint16_t convert_Itype(string, string);
+uint16_t convert_Itype_branch(string, string, vector<string>&, size_t);
 uint16_t convert_Itype_loadstore(string, string);
 uint16_t convert_Jtype(string, string);
 
 vector<string> split_str(string, string);
+vector<string> split_instr(string mips);
 void replace_substr(string&, string, string);
 void trim(string&);
+bool startswith(const string&, const string&);
 string convert_uint16_t_to_binstring(uint16_t);
 string convert_uint16_t_to_hexstring(uint16_t);
 string convert_hex_to_bin_str(string);
@@ -118,8 +126,19 @@ int main(int argc, char* argv[]) {
     vector<string> mipscode = init_mipscode();
     read_all_mips(mipsfile, mipscode);
 
-    first_pass_to_map_label_def_to_hexlines(mipscode);
-    vector<string> hexcode = second_pass_to_generate_hexcode(mipscode);
+    vector<string> hexcode;
+    bool is_offset_overflow;
+    do {
+        is_offset_overflow = false;
+
+        first_pass_to_map_label_def_to_hexlines(mipscode);
+
+        try {
+            hexcode = second_pass_to_generate_hexcode(mipscode);
+        } catch (Exception exc) {
+            is_offset_overflow = exc == BRACH_OFFSET_OVERFLOW;
+        }
+    } while (is_offset_overflow);
 
     dump_hexcode_to_file(hexcode, hexfile);
 
@@ -155,7 +174,7 @@ void read_all_mips(ifstream& mipsfile, vector<string>& mipscode) {
 }
 
 /**
- * @brief Goes through mips lines and populates the map `mipslabel2hexline`. Hexline count is accumulated
+ * @brief Goes through mips lines and populates the map `label2line`. Hexline count is accumulated
  * by how many hex lines each mips instruction generates, and that accumulation is assigned to the defined
  * label in the order they are excountered.
  *
@@ -167,10 +186,10 @@ void first_pass_to_map_label_def_to_hexlines(vector<string>& mipscode) {
         mipsline2hexlinestart[mipsline] = hexline; // `mipscode[mipsline]` translates to hex at `hexlline`
 
         mips = mipscode[mipsline];
-        mips = process_label(mips, hexline); // removing label from mips code
+        mips = process_label(mips, mipsline); // removing label from mips code
 
         // hardcoding which mips corresponds to how many hexline
-        if (mips.starts_with("push") || mips.starts_with("pop")) {
+        if (startswith(mips, "push") || startswith(mips, "pop")) {
             hexline += 2;
         } else {
             hexline++;
@@ -180,36 +199,37 @@ void first_pass_to_map_label_def_to_hexlines(vector<string>& mipscode) {
 
 /**
  * @brief If provided mips contains a label definition, it maps that label definition to the provided
- * hexline. Returns the mips instruction without label, after processing it.
+ * mipsline. Returns the mips instruction without label, after processing it.
  *
  * @param mips Mips line
  * @param hexline Current hex code line
  * @return Mips code without label
  */
-string process_label(string mips, unsigned hexline) {
+string process_label(string mips, size_t mipsline) {
     trim(mips);
     if (mips.find(':') != string::npos) {
         // label found
         vector<string> label_mips_split = split_str(mips, ":");
-        mipslabel2hexline[label_mips_split[0]] = hexline; // the label definition is mapped to current hexline
-        mips = label_mips_split[1]; // mips line may just contain label:, on that case [1] is ""
+        label2line[label_mips_split[0]] = mipsline; // the label definition is mapped to current mipsline
+        mips = label_mips_split[1]; // mips line may just contain label:, on that case split[1] is ""
         trim(mips);
     }
     return mips;
 }
 
 /**
- * @brief After label definitions are mapped to their corresponding hexline, 2nd pass goes through each mips
+ * @brief After label definitions are mapped to their corresponding mipsline, 2nd pass goes through each mips
  * line and generates corresponding hexcode in their proper instruction format. Branching references are
- * replaced with actual addresses or offset based on the `mipslabel2hexline` map.
+ * replaced with actual addresses or offset based on the `label2line` and 'mipsline2hexlinestart` map.
  *
  * @param mipscode List of mips code to assemble
  * @return List of hexcode strings that were assembled from `mipscode`
  */
 vector<string> second_pass_to_generate_hexcode(vector<string>& mipscode) {
     vector<string> hexcodes;
-    size_t hexline = 0;
-    for (string& mips : mipscode) {
+    string mips;
+    for (size_t mipsline = 0; mipsline < mipscode.size(); mipsline++) {
+        mips = mipscode[mipsline];
         try {
             vector<string> instr_operand_split = preprocess_mips(mips);
 
@@ -226,14 +246,18 @@ vector<string> second_pass_to_generate_hexcode(vector<string>& mipscode) {
                 vector<uint16_t> hexcodes_x16 = convert_push_pop(instruction, operands);
                 hexcodes.push_back(convert_uint16_t_to_hexstring(hexcodes_x16[0]));
                 hexcodes.push_back(convert_uint16_t_to_hexstring(hexcodes_x16[1]));
-                hexline += 2;
             } else {
-                uint16_t hexcode = convert_mips_to_hexcode(instruction, operands, hexline);
+                uint16_t hexcode = convert_mips_to_hexcode(instruction, operands, mipscode, mipsline);
                 hexcodes.push_back(convert_uint16_t_to_hexstring(hexcode));
-                hexline++;
             }
-        } catch (int exception) {
-            cerr << "Could not convert instruction" << endl;
+        } catch (Exception exception) {
+            if (exception == BRACH_OFFSET_OVERFLOW) {
+                throw BRACH_OFFSET_OVERFLOW;
+            } else if (exception == INVALID_INSTR) {
+                cerr << "ERROR: Invalid instruction" << endl;
+            } else {
+                cerr << "ERROR: Something went wrong" << endl;
+            }
         }
     }
     return hexcodes;
@@ -274,7 +298,7 @@ void generate_debug_file(vector<string>& mipscode, vector<string>& hexcode) {
     ofstream hex_debug_file("hex_debug.txt");
     size_t hexline = 0;
     for (size_t mipsline = 0; mipsline < mipscode.size() - 1; mipsline++) {
-        hex_debug_file << "[" << mipsline << "] " << mipscode[mipsline] << ":" << endl;
+        hex_debug_file << "[" << mipsline << "] " << mipscode[mipsline] << endl;
         while (hexline < mipsline2hexlinestart[mipsline + 1]) {
             hex_debug_file << "\t" << "[" << hexline << "] " << convert_hex_to_bin_str(hexcode[hexline]) <<
                 "\t" << hexcode[hexline++] << endl;
@@ -289,29 +313,31 @@ void generate_debug_file(vector<string>& mipscode, vector<string>& hexcode) {
 }
 
 /**
- * @brief Converts provided mips to hexcode based on it's instruction type.
+ * @brief Converts provided mips to hexcode based on it's instruction type. If branch instruction offset overflows,
+ * throws a BRANCH_OVERFLOW exception.
  *
  * @param instruction Mips instruction name
  * @param operands Mips instruction operands
  * @param hexline Current hexline being assembler
  * @return uint16_t Assembled 16 bit hexcode
  */
-uint16_t convert_mips_to_hexcode(string instruction, string operands, size_t hexline) {
+uint16_t convert_mips_to_hexcode(string instruction, string operands, vector<string>& mipscode, size_t mipsline) {
     if (instr2op.count(instruction) == 0) {
-        throw 1;
+        throw INVALID_INSTR;
     } else if (instr2op[instruction].second == R) {
         return convert_Rtype(instruction, operands);
     } else if (instr2op[instruction].second == S) {
         return convert_Stype(instruction, operands);
     } else if (instr2op[instruction].second == I) {
-        return convert_Itype(instruction, operands, hexline);
+        return convert_Itype(instruction, operands);
+    } else if (instr2op[instruction].second == IB) {
+        return convert_Itype_branch(instruction, operands, mipscode, mipsline);
     } else if (instr2op[instruction].second == ILS) {
         return convert_Itype_loadstore(instruction, operands);
     } else {
         return convert_Jtype(instruction, operands);
     }
 }
-
 /**
  * @brief Mips `push` and `pop` are each converted to two separate instructions.
  * Example: push $t0 -> sw $t0, 0($sp)
@@ -362,26 +388,92 @@ uint16_t convert_Stype(string operation, string operands) {
     return hexcode;
 }
 
-uint16_t convert_Itype(string operation, string operands, size_t hexline) {
+uint16_t convert_Itype(string operation, string operands) {
     vector<string> args = split_str(operands, ",");
     string rt = args[0], rs = args[1];
-
-    // if mips is `beq` or `bneq`, their labels are replaced with offset to those label definitions from hexline
-    // else its just a constant number.
-    int16_t addr_imm_x16 =
-        operation == "beq" || operation == "bneq" ?
-        mipslabel2hexline[args[2]] - hexline : stoi(args[2]); 
-        // -1 because PC is already incremented after the branch instruciton
-    if (addr_imm_x16 < 0) {
-        addr_imm_x16 &= 0x000F; // zero-ing every bit other than 4 LSBs. 
-    }
+    int16_t immidiate = stoi(args[2]);
 
     uint16_t hexcode = 0;
     hexcode |= instr2op[operation].first;
     hexcode |= (reg2addr[rs] << SHIFT_RS);
     hexcode |= (reg2addr[rt] << SHIFT_RT);
-    hexcode |= addr_imm_x16;
+    hexcode |= immidiate;
     return hexcode;
+}
+
+uint16_t convert_Itype_branch(string operation, string operands, vector<string>& mipscode, size_t mipsline) {
+    vector<string> args = split_str(operands, ",");
+    string rt = args[0], rs = args[1], label = args[2];
+
+    size_t hexline = mipsline2hexlinestart[mipsline];
+    int16_t offset = mipsline2hexlinestart[label2line[label]] - hexline;
+
+    if (offset > 7 || offset < -8) {
+        replace_branch_instr(mipscode, mipsline);
+        throw BRACH_OFFSET_OVERFLOW;
+    }
+
+    offset &= 0x000F; // zero-ing every bit other than 4 LSB, range (-8, 7)
+
+    uint16_t hexcode = 0;
+    hexcode |= instr2op[operation].first;
+    hexcode |= (reg2addr[rs] << SHIFT_RS);
+    hexcode |= (reg2addr[rt] << SHIFT_RT);
+    hexcode |= offset;
+    return hexcode;
+}
+
+void replace_branch_instr(vector<string>& mipscode, size_t mipsline) {
+    string mips = mipscode[mipsline];
+    vector<string> label_instr_oper = split_instr(mips);
+    string label_def = label_instr_oper[0], instruction = label_instr_oper[1];
+    string rt = label_instr_oper[2], rs = label_instr_oper[3], label_dest = label_instr_oper[4];
+    
+    mipscode.erase(mipscode.begin() + mipsline); // current instruction will be replaced
+    vector<string> replacement;
+    if (!label_def.empty()) {
+        replacement.push_back(label_def + ":");
+    }
+    if (instruction == "beq") {
+        replacement.insert(replacement.end(), {
+            "bneq " + rt + "," + rs + ",__NOT_" + label_dest,
+            "j " + label_dest,
+            "__NOT_" + label_dest + ":"
+            });
+    } else if (instruction == "bneq") {
+        replacement.insert(replacement.end(), {
+            "beq " + rt + "," + rs + ",__NOT_" + label_dest,
+            "j " + label_dest,
+            "__NOT_" + label_dest + ":"
+            });
+    }
+
+    mipscode.insert(mipscode.begin() + mipsline, replacement.begin(), replacement.end());
+}
+
+vector<string> split_instr(string mips) {
+    string label;
+    string instruction;
+    vector<string> operands;
+
+    trim(mips);
+    replace_substr(mips, ", ", ",");
+    if (mips.find(":") != string::npos) {
+        vector<string> label_instr = split_str(mips, ":");
+
+        label = label_instr[0];
+        trim(label);
+        mips = label_instr[1];
+        trim(mips);
+    }
+
+    vector<string> instr_operands = split_str(mips, " ");
+    instruction = instr_operands[0];
+    operands = split_str(instr_operands[1], ",");
+
+    vector<string> split = {label, instruction}; // label could be empty
+    split.insert(split.end(), operands.begin(), operands.end());
+    return split;
 }
 
 uint16_t convert_Itype_loadstore(string operation, string operands) {
@@ -391,27 +483,26 @@ uint16_t convert_Itype_loadstore(string operation, string operands) {
     vector<string> args1 = split_str(args0[1], "(");
     args1[1].pop_back(); // removes trailing )
 
-    string offset = args1[0], rs = args1[1];
-    int16_t offset_x16 = stoi(offset);
-    if (offset_x16 < 0) {
-        offset_x16 &= 0x000F; // zero-ing every bits other than 4 LSB bits (offset range -8, 7)
-    }
+    string offset_str = args1[0], rs = args1[1];
+    int16_t offset = stoi(offset_str);
+
+    offset &= 0x000F; // zero-ing every bits other than 4 LSB bits (offset range -8, 7)
 
     uint16_t hexcode = 0;
     hexcode |= instr2op[operation].first;
     hexcode |= (reg2addr[rs] << SHIFT_RS);
     hexcode |= (reg2addr[rt] << SHIFT_RT);
-    hexcode |= offset_x16;
+    hexcode |= offset;
     return hexcode;
 }
 
 uint16_t convert_Jtype(string operation, string operand) {
-    uint16_t addr_x16 = mipslabel2hexline[operand]; // label is replaced with it's definition hexline
+    uint16_t addr = mipsline2hexlinestart[label2line[operand]]; // label is replaced with it's definition hexline
 
     // cout << operands << endl;
     uint16_t hexcode = 0;
     hexcode |= instr2op[operation].first;
-    hexcode |= (addr_x16 << SHIFT_JA);
+    hexcode |= (addr << SHIFT_JA);
     return hexcode;
 }
 
@@ -458,6 +549,10 @@ void trim(string& str) {
     string ws = " \t";
     str.erase(0, str.find_first_not_of(ws));
     str.erase(str.find_last_not_of(ws) + 1);
+}
+
+bool startswith(const string& subject, const string& target) {
+    return subject.find(target) == 0;
 }
 
 /**
