@@ -21,3 +21,4 @@ pop $t1
 j end
 label2:    bneq $t0, $t2, label3
 end:
+beq $t1, $t2, label1

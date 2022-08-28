@@ -353,7 +353,7 @@ vector<uint16_t> convert_push_pop(string operation, string operands) {
     vector<uint16_t> hexcodes;
     if (operation == "push") {
         hexcodes.push_back(convert_Itype_loadstore("sw", operands + "," + "0($sp)"));
-        hexcodes.push_back(convert_Itype("addi", "$sp,$sp,-1"));
+        hexcodes.push_back(convert_Itype("subi", "$sp,$sp,1"));
     } else if (operation == "pop") {
         hexcodes.push_back(convert_Itype_loadstore("lw", operands + "," + "0($sp)"));
         hexcodes.push_back(convert_Itype("addi", "$sp,$sp,1"));
