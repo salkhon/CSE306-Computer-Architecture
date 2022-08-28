@@ -379,6 +379,8 @@ uint16_t convert_Stype(string operation, string operands) {
     string rt = args[0], rs = args[1];
     uint16_t shamt_x16 = stoi(args[2]);
 
+    shamt_x16 &= 0x000F;
+
     uint16_t hexcode = 0;
     hexcode |= instr2op[operation].first;
     hexcode |= (reg2addr[rs] << SHIFT_RS);
