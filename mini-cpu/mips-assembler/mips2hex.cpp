@@ -77,6 +77,8 @@ map<string, unsigned> label2line;
  */
 map<unsigned, unsigned> mipsline2hexlinestart;
 
+size_t replace_label_id = 0;
+
 vector<string> init_mipscode();
 void read_all_mips(ifstream&, vector<string>&);
 void first_pass_to_map_label_def_to_hexlines(vector<string>&);
@@ -440,15 +442,15 @@ void replace_branch_instr(vector<string>& mipscode, size_t mipsline) {
     }
     if (instruction == "beq") {
         replacement.insert(replacement.end(), {
-            "bneq " + rt + "," + rs + ",__NOT_" + label_dest,
+            "bneq " + rt + "," + rs + ",__NOT_" + label_dest + "_" + to_string(replace_label_id),
             "j " + label_dest,
-            "__NOT_" + label_dest + ":"
+            "__NOT_" + label_dest + "_" + to_string(replace_label_id++) + ":"
             });
     } else if (instruction == "bneq") {
         replacement.insert(replacement.end(), {
-            "beq " + rt + "," + rs + ",__NOT_" + label_dest,
+            "beq " + rt + "," + rs + ",__NOT_" + label_dest + "_" + to_string(replace_label_id),
             "j " + label_dest,
-            "__NOT_" + label_dest + ":"
+            "__NOT_" + label_dest + "_" + to_string(replace_label_id++) + ":"
             });
     }
 
